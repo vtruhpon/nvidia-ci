@@ -1418,8 +1418,26 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 	})
 })
 
-// cleanupGPUOperatorResources performs cleanup of GPU Operator resources
-// It checks if cleanup should run based on cleanupAfterTest and cleanup label
+var _ = Describe("GPU Cleanup", Label(tsparams.LabelCleanup), func() {
+	It("Cleanup NVIDIA GPU Operator and NFD resources", Label(tsparams.LabelCleanup), func() {
+		if !mig.IsLabelInFilter(tsparams.LabelCleanup) {
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"Skipping test: '%s' label not present in ginkgo label filter", tsparams.LabelCleanup)
+			Skip("Test skipped: 'cleanup' label not present in ginkgo label filter")
+		}
+
+		By("Cleaning up GPU Operator resources")
+		cleanupGPUOperatorResources()
+
+		By("Cleaning up NFD resources")
+		if err := nfd.Cleanup(inittools.APIClient); err != nil {
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"NFD cleanup reported an error (resources may already be gone): %v", err)
+		}
+	})
+})
+
+// cleanupGPUOperatorResources deletes GPU Operator and gpu-burn resources if they exist.
 func cleanupGPUOperatorResources() {
 	cleanupClusterPolicy()
 	cleanupNativeDRAResources()
@@ -1531,7 +1549,7 @@ func cleanupClusterPolicy() {
 	By("Deleting ClusterPolicy")
 	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
 	if err == nil && clusterPolicyBuilder.Exists() {
-		_, err = clusterPolicyBuilder.Delete()
+		err = clusterPolicyBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
 	} else {
@@ -1544,7 +1562,12 @@ func cleanupCSV() {
 	By("Deleting CSV")
 	// Since this is out of defer functions, the CSV need to be listed before deleting gpu-operator CSV.
 	csvList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
-	Expect(err).ToNot(HaveOccurred(), "Error listing CSV: %v", err)
+	if err != nil {
+		glog.V(gpuparams.GpuLogLevel).Infof(
+			"Error listing CSV (namespace may already be gone): %v", err)
+
+		return
+	}
 	for _, csv := range csvList {
 		if strings.Contains(csv.Definition.Name, "gpu-operator") {
 			err := csv.Delete()
@@ -1585,7 +1608,7 @@ func cleanupGPUOperatorNamespace() {
 	By("Deleting GPU Operator Namespace")
 	nsBuilder, err := namespace.Pull(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
 	if err == nil && nsBuilder.Exists() {
-		err = nsBuilder.Delete()
+		err = nsBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
 	} else {
@@ -1846,7 +1869,7 @@ func cleanupGPUBurnNamespace() {
 	By("Deleting GPU Burn Namespace")
 	burnNsBuilder, err := namespace.Pull(inittools.APIClient, burn.Namespace)
 	if err == nil {
-		err = burnNsBuilder.Delete()
+		err = burnNsBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting burn namespace: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", burn.Namespace)
 	}

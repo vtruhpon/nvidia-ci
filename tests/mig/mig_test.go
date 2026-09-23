@@ -112,6 +112,25 @@ var _ = Describe("MIG", Ordered, Label(tsparams.LabelSuite), func() {
 	})
 })
 
+var _ = Describe("GPU Cleanup", Label(tsparams.LabelCleanup), func() {
+	It("Cleanup NVIDIA GPU Operator and NFD resources", Label(tsparams.LabelCleanup), func() {
+		if !mig.IsLabelInFilter(tsparams.LabelCleanup) {
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"Skipping test: '%s' label not present in ginkgo label filter", tsparams.LabelCleanup)
+			Skip("Test skipped: 'cleanup' label not present in ginkgo label filter")
+		}
+
+		By("Cleaning up GPU Operator resources")
+		mig.CleanupGPUOperatorResources(true, burn.Namespace)
+
+		By("Cleaning up NFD resources")
+		if err := nfd.Cleanup(inittools.APIClient); err != nil {
+			glog.V(gpuparams.GpuLogLevel).Infof(
+				"NFD cleanup reported an error (resources may already be gone): %v", err)
+		}
+	})
+})
+
 // reportOpenShiftVersionAndEnsureNFD reports the OpenShift version, writes it to a report file,
 // and ensures that Node Feature Discovery (NFD) is installed.
 func ReportOpenShiftVersionAndEnsureNFD(nfdInstance *operatorconfig.CustomConfig) {

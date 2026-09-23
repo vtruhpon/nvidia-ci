@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	nvidiagpuv1 "github.com/NVIDIA/gpu-operator/api/nvidia/v1"
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -15,6 +16,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sjson "k8s.io/apimachinery/pkg/util/json"
+	apiwait "k8s.io/apimachinery/pkg/util/wait"
 	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -201,6 +203,35 @@ func (builder *Builder) Delete() (*Builder, error) {
 	builder.Object = nil
 
 	return builder, nil
+}
+
+// DeleteAndWait removes a ClusterPolicy and waits for it to be fully gone (i.e. for any
+// operator-owned finalizers to be cleared) before returning. Callers that tear down the
+// GPU Operator CSV/namespace immediately after issuing the delete risk killing the
+// controller before it clears those finalizers, leaving nvidia-gpu-operator Terminating.
+func (builder *Builder) DeleteAndWait(timeout time.Duration) error {
+	if valid, err := builder.validate(); !valid {
+		return err
+	}
+
+	glog.V(100).Infof("Deleting ClusterPolicy %s and waiting for the removal to complete", builder.Definition.Name)
+
+	if !builder.Exists() {
+		return nil
+	}
+
+	if _, err := builder.Delete(); err != nil {
+		return err
+	}
+
+	return apiwait.PollUntilContextTimeout(
+		context.TODO(), 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			if !builder.Exists() {
+				return true, nil
+			}
+
+			return false, nil
+		})
 }
 
 // Create makes a ClusterPolicy in the cluster and stores the created object in struct.

@@ -95,7 +95,7 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_BUNDLE_IMAGE`: GPU Operator bundle image to deploy with operator-sdk if NVIDIAGPU_DEPLOY_FROM_BUNDLE variable is set to true.  Default value for bundle image if not set: ghcr.io/nvidia/gpu-operator/gpu-operator-bundle:main-latest - _optional when deploying from bundlle_
 - `NVIDIAGPU_DEPLOY_FROM_BUNDLE`: boolean flag to deploy GPU operator from bundle image with operator-sdk - Default value is false - _required when deploying from bundle_
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
-- `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_. See the known issue note in [Cleaning up leftover resources](#cleaning-up-leftover-resources) about automatic cleanup occasionally reporting a spurious NFD-related failure.
+- `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_. To tear down leftover GPU Operator resources later without re-running deploy, use `TEST_LABELS='cleanup'` (see [Cleaning up leftover resources](#cleaning-up-leftover-resources)).
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
 - `NVIDIAGPU_GPU_CLUSTER_POLICY_PATCH`: a JSON patch to apply to a default cluster policy from ALM examples, written according to
    [RFC 6902](http://tools.ietf.org/html/rfc6902) (also see [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/)) - _optional_
@@ -246,8 +246,19 @@ $ make run-mig-tests ARGS="-- --mixed.mig.instances='1,0,1,1' --mixed.mig.pod-de
 
 #### Cleanup:
 
-If the GPU operator and gpu burn pod need to be cleaned up, just set `NVIDIAGPU_CLEANUP=true`
-in the last execution of either steps 1 or 2.
+Run the standalone `cleanup` spec to remove the GPU Operator, NFD, and leftover gpu-burn
+resources without re-running the deploy or MIG tests:
+
+```bash
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='cleanup'
+$ make run-tests
+```
+
+The same label works with the MIG suite (`TEST_FEATURES="mig"` and `make run-mig-tests`).
+`NVIDIAGPU_CLEANUP=true` only runs teardown at the end of that same invocation, after the
+selected specs have finished. To remove leftover resources later without re-running deploy
+or MIG tests, use the `cleanup` label.
 
 ### Testing Time-Slicing with GPU Operator
 
@@ -323,19 +334,27 @@ a failure), set `NVIDIAGPU_CLEANUP=false` (same variable used by the base testca
 
 If you ran any `nvidiagpu` testcase with `NVIDIAGPU_CLEANUP=false` (e.g. to chain into MPS/MIG/
 time-slicing, or to leave resources in place for debugging) and now want to remove everything,
-re-run the same testcase with `NVIDIAGPU_CLEANUP=true`. If the GPU Operator/NFD are already
-installed and ready, this completes quickly (no full redeployment) and then runs the same
-`AfterAll` cleanup a normal run performs, removing NFD, the GPU Operator (namespace,
-Subscription, OperatorGroup, CSV, ClusterPolicy and/or NVIDIADriver/GPUCluster, whichever was
-deployed), and any leftover gpu-burn resources.
+run the dedicated `cleanup` spec. It does not reinstall NFD or the GPU Operator:
 
-**Known issue**: `AfterAll`'s automatic cleanup (triggered when `NVIDIAGPU_CLEANUP=true`, the
-default) can occasionally report a spurious failure like `Error cleaning up NFD resources:
-failed to delete NFD CR: NodeFeatureDiscovery object nfd-instance doesn't exist in namespace
-openshift-nfd` — this is a timing race in NFD's own delete-and-wait cleanup logic
-(`pkg/nfd/deploynfd.go`), not an actual test failure; the resource in question was in fact
-successfully deleted (tracked for a separate PR). If you see this, simply re-run the same
-command again to confirm cleanup completed.
+```bash
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='cleanup'
+$ make run-tests
+```
+
+That deletes ClusterPolicy (waiting for operator-owned finalizers), CSV, Subscription,
+OperatorGroup, the `nvidia-gpu-operator` namespace, leftover gpu-burn resources, and NFD.
+
+`NVIDIAGPU_CLEANUP=true` still controls `AfterAll` teardown of the *same* run. Re-running
+the deploy testcase with that flag also re-enters the deploy spec first. Use the `cleanup`
+label when you only want teardown.
+
+**Known issue**: NFD teardown can occasionally report a spurious failure like
+`Error cleaning up NFD resources: failed to delete NFD CR: NodeFeatureDiscovery object
+nfd-instance doesn't exist in namespace openshift-nfd` — this is a timing race in NFD's
+own delete-and-wait cleanup logic (`pkg/nfd/deploynfd.go`), not an actual test failure;
+the resource in question was in fact successfully deleted (tracked for a separate PR).
+The `cleanup` spec logs that error and continues.
 
 ### Examples of Testing GPU Operator end-to-end
 

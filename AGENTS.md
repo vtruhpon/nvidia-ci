@@ -45,7 +45,7 @@ Tests are Ginkgo suites under `tests/`. The test-runner script (`scripts/test-ru
 - **`TEST_FEATURES`** (required): comma-separated subdirectory names under `tests/` (e.g. `nvidiagpu`, `mps`, `mig`, `nvidianetwork`, `timeslicing`, `dra`)
 - **`TEST_LABELS`**: Ginkgo label filter (e.g. `'nvidia-ci,gpu'`, `'deploy || rdma-legacy-sriov'`)
 - **`KUBECONFIG`**: path to cluster kubeconfig
-- **`NVIDIAGPU_CLEANUP`**: set to `false` when chaining test suites (e.g. deploy GPU Operator first, then run MPS/MIG/timeslicing tests on the same cluster)
+- **`NVIDIAGPU_CLEANUP`**: set to `false` when chaining test suites (e.g. deploy GPU Operator first, then run MPS/MIG/timeslicing tests on the same cluster). To tear down leftover GPU Operator resources afterwards, run `TEST_LABELS='cleanup'` (do not re-run the deploy spec). Cleanup label is useful if there is any problem with the GPU operator, classic or DRA.
 
 Pass ginkgo CLI parameters via `ARGS`: `make run-tests ARGS="-- --single.mig.profile=1"`
 

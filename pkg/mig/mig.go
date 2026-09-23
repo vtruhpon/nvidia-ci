@@ -695,7 +695,7 @@ func cleanupClusterPolicy() {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete ClusterPolicy"))
 	clusterPolicyBuilder, err := nvidiagpu.Pull(inittools.APIClient, nvidiagpu.ClusterPolicyName)
 	if err == nil && clusterPolicyBuilder.Exists() {
-		_, err := clusterPolicyBuilder.Delete()
+		err = clusterPolicyBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting ClusterPolicy: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy deleted successfully")
 	} else {
@@ -749,7 +749,7 @@ func cleanupGPUOperatorNamespace() {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete GPU Operator Namespace"))
 	nsBuilder := namespace.NewBuilder(inittools.APIClient, nvidiagpu.SubscriptionNamespace)
 	if nsBuilder.Exists() {
-		err := nsBuilder.Delete()
+		err := nsBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting namespace: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", nvidiagpu.SubscriptionNamespace)
 	}
@@ -761,7 +761,7 @@ func cleanupGPUBurnNamespace(burnNamespace string) {
 	glog.V(gpuparams.Gpu10LogLevel).Infof("%s", colorLog(colorCyan+colorBold, "Delete GPU Burn Namespace"))
 	burnNsBuilder := namespace.NewBuilder(inittools.APIClient, burnNamespace)
 	if burnNsBuilder.Exists() {
-		err := burnNsBuilder.Delete()
+		err := burnNsBuilder.DeleteAndWait(nvidiagpu.DeletionTimeoutDuration)
 		Expect(err).ToNot(HaveOccurred(), "Error deleting burn namespace: %v", err)
 		glog.V(gpuparams.GpuLogLevel).Infof("Namespace %s deleted successfully", burnNamespace)
 	}
